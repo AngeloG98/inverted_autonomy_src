@@ -1,0 +1,7 @@
+<launch>
+    <node pkg="inverted_planner" type="inverted_planner" name="inverted_planner" output="screen">
+    </node>
+
+    <include file="$(find inverted_planner)/launch/rviz.launch"/>
+
+</launch>

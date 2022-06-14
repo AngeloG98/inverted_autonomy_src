@@ -1,0 +1,3 @@
+<launch>
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find inverted_planner)/launch/map_default.rviz" required="true" />
+</launch>
