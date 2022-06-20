@@ -8,12 +8,15 @@ PlanVisualization::PlanVisualization(ros::NodeHandle &nh)
     control_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/control_point", 2);
     trajectory_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/trajectory_point", 2);
     astar_sample_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/astar_sample_point", 2);
+    astar_exp_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/astar_exp_point", 2);
 }
 
-// sphere and line
+
 void PlanVisualization::displayMarkerList(ros::Publisher &pub, const vector<Eigen::Vector3d> &list, double scale,
-                                            Eigen::Vector4d color, int id)
+                                            Eigen::Vector4d color, int id, bool display_info)
 {
+    /* display_info : true for both sphere and line
+                      false for sphere only */
     visualization_msgs::Marker sphere, line_strip;
     sphere.header.frame_id = line_strip.header.frame_id = "map";
     sphere.header.stamp = line_strip.header.stamp = ros::Time::now();
@@ -41,9 +44,13 @@ void PlanVisualization::displayMarkerList(ros::Publisher &pub, const vector<Eige
         sphere.points.push_back(pt);
         line_strip.points.push_back(pt);
     }
-    
-    pub.publish(sphere);
-    pub.publish(line_strip);
+    if (display_info){
+        pub.publish(sphere);
+        pub.publish(line_strip);
+    } else {
+        pub.publish(sphere);
+    }
+
 }
 
 
@@ -61,7 +68,7 @@ void PlanVisualization::displayControlPointList(Eigen::MatrixXd ctrl_pts, int id
         list.push_back(pt);
     }
     Eigen::Vector4d color(1, 0, 0, 1);
-    displayMarkerList(control_point_pub_, list, 0.15, color, id);
+    displayMarkerList(control_point_pub_, list, 0.15, color, id, true);
 }
 
 void PlanVisualization::displayTrajectoryPointList(Eigen::MatrixXd traj_pts, int id)
@@ -78,12 +85,17 @@ void PlanVisualization::displayTrajectoryPointList(Eigen::MatrixXd traj_pts, int
         list.push_back(pt);
     }
     Eigen::Vector4d color(0, 1, 0, 1);
-    displayMarkerList(trajectory_point_pub_, list, 0.05, color, id);
+    displayMarkerList(trajectory_point_pub_, list, 0.05, color, id, true);
 }
 
 void PlanVisualization::displayAstarSamplePointList(vector<Eigen::Vector3d> astar_sample_pts, int id){
     Eigen::Vector4d color(1, 1, 0, 1);
-    displayMarkerList(astar_sample_point_pub_, astar_sample_pts, 0.05, color, id);
+    displayMarkerList(astar_sample_point_pub_, astar_sample_pts, 0.05, color, id, true);
+}
+
+void PlanVisualization::displayAstarExpandedPointList(vector<Eigen::Vector3d> astar_exp_pts, int id){
+    Eigen::Vector4d color(153.0 / 255.0, 50.0 / 255.0, 204.0 / 255.0, 1);
+    displayMarkerList(astar_exp_point_pub_, astar_exp_pts, 0.05, color, id, false);
 }
 
 } // namespace inverted_planner

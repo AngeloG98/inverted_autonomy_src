@@ -145,6 +145,7 @@ public:
 
     // get trajectory
     std::vector<Eigen::Vector3d> getSampleTraj(double sample_rate);
+    std::vector<Eigen::Vector3d> getExpandedPoint();
 
     // enum
     // {

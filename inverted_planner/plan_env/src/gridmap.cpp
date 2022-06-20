@@ -69,8 +69,8 @@ void GridMap::setOccupancyObject(Eigen::MatrixXd objectlist, double occ){
     // }
 
     // box
-    Eigen::Vector3d object_up(0.5, 10, 15);
-    Eigen::Vector3d object_low(-0.5, -10, 12);
+    Eigen::Vector3d object_up(0.5, 5, 20);
+    Eigen::Vector3d object_low(-0.5, -5, 12);
 
     // set a box-like range
     Eigen::Vector3d pos;

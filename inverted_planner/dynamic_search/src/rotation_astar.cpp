@@ -16,12 +16,12 @@ void RotationAstar::init(){
     inv_time_resolution_ = 1.0 / time_resolution_;
 
     // searching parameters setup
-    tau_ = 0.2;
+    tau_ = 0.1;
     max_vel_ = 100.0;
     max_acc_ = 2.0;
     rho_t_ = 1.0;
     horizon_ = 100.0;
-    lambda_h_ = 10.0;
+    lambda_h_ = 100.0;
     memory_size_ = 100000;
     collision_check_ = 5;
     transition_ = Eigen::MatrixXd::Identity(6, 6);
@@ -139,7 +139,8 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
         curr_node = open_set_.top();
 
         // terminal condition
-        bool near_end = (curr_node->p_index - end_p_index).norm() <= inv_resolution_;
+        bool near_end = (curr_node->p_index - end_p_index).norm() <= 2*inv_resolution_;
+        // bool near_end = (curr_node->state.head(3)[0] > end_pos[0]);
         bool reach_horizon = (curr_node->state.head(3) - end_state.head(3)).norm() >= horizon_;
 
         if (near_end || reach_horizon){
@@ -165,11 +166,12 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
         // normal input list
         // for (double ax = -max_acc_; ax <= max_acc_ + 1e-3; ax += max_acc_ )
         double ax = 0.0;
-        for (double ay = -max_acc_; ay <= max_acc_ + 1e-3; ay += max_acc_)
-            for (double az = -5*max_acc_; az <= 5*max_acc_ + 1e-3; az += max_acc_ ){
-                input << ax, ay, az;
-                input_list.push_back(input);
-            }
+            for (double ay = -max_acc_; ay <= max_acc_ + 1e-3; ay += max_acc_)
+            // double ay = 0.0;
+                for (double az = -5*max_acc_; az <= 5*max_acc_ + 1e-3; az += max_acc_ ){
+                    input << ax, ay, az;
+                    input_list.push_back(input);
+                }
 
         for (int i = 0; i < input_list.size(); ++i){
             input = input_list[i];
@@ -245,7 +247,8 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                 // update mem count
                 used_node_num_ += 1;
                 if (used_node_num_ == memory_size_){
-                    ROS_ERROR("Run out of node memory!");
+                    // ROS_ERROR("Run out of node memory!");
+                    ROS_WARN("Run out of node memory!");
                     return -1;
                 }
             } else if (next_node->node_state == OPEN){
@@ -264,7 +267,8 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
             }
         }
     }
-    ROS_ERROR("Open set empty!");
+    // ROS_ERROR("Open set empty!");
+    ROS_WARN("Open set empty!");
     return -2;
 }
 
@@ -281,27 +285,40 @@ void RotationAstar::getFullTraj(TrajNodePtr end_node){
 std::vector<Eigen::Vector3d> RotationAstar::getSampleTraj(double sample_rate){
     std::vector<Eigen::Vector3d> pos_sample_list;
 
-    TrajNodePtr node = full_traj_nodes_.back();
-    Eigen::Matrix<double, 6, 1> state_i;
-    Eigen::Matrix<double, 6, 1> state_f;
-    Eigen::Vector3d input;
-    double duration;
+    if (!full_traj_nodes_.empty()){
+        TrajNodePtr node = full_traj_nodes_.back();
+        Eigen::Matrix<double, 6, 1> state_i;
+        Eigen::Matrix<double, 6, 1> state_f;
+        Eigen::Vector3d input;
+        double duration;
 
-    while (node->parent != NULL){
-        state_i = node->parent->state;
-        input = node->input;
-        duration = node->duration;
+        while (node->parent != NULL){
+            state_i = node->parent->state;
+            input = node->input;
+            duration = node->duration;
 
-        for (double d_tau = duration; d_tau >= -1e-5; d_tau -= duration / sample_rate){
-            stateTransition(state_i, state_f, input, d_tau);
-            pos_sample_list.push_back(state_f.head(3));
+            for (double d_tau = duration; d_tau >= -1e-5; d_tau -= duration / sample_rate){
+                stateTransition(state_i, state_f, input, d_tau);
+                pos_sample_list.push_back(state_f.head(3));
+            }
+
+            node = node->parent;
         }
-
-        node = node->parent;
+        reverse(pos_sample_list.begin(), pos_sample_list.end());
     }
 
-    reverse(pos_sample_list.begin(), pos_sample_list.end());
     return pos_sample_list;
+}
+
+std::vector<Eigen::Vector3d> RotationAstar::getExpandedPoint(){
+    std::vector<Eigen::Vector3d> expanded_pos_list;
+
+    // used node 
+    for (int i = 0; i < used_node_num_; i++) {
+        expanded_pos_list.push_back(traj_nodes_mem_[i]->state.head(3));
+    }
+
+    return expanded_pos_list;
 }
 
 } // namespace inverted_planner
