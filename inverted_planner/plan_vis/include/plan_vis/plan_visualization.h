@@ -19,6 +19,7 @@ private:
 
     ros::Publisher control_point_pub_;
     ros::Publisher trajectory_point_pub_;
+    ros::Publisher astar_sample_point_pub_;
 
 public:
     PlanVisualization() {}
@@ -29,6 +30,7 @@ public:
                             Eigen::Vector4d color, int id);
 
     void displayControlPointList(Eigen::MatrixXd ctrl_pts, int id);
-    void displayTrajectoryPointList(Eigen::MatrixXd ctrl_pts, int id);
+    void displayTrajectoryPointList(Eigen::MatrixXd traj_pts, int id);
+    void displayAstarSamplePointList(vector<Eigen::Vector3d> astar_sample_pts, int id);
 };
 } // namespace inverted_planner

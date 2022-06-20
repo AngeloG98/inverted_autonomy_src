@@ -20,18 +20,17 @@ struct TrajNode
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     Eigen::Matrix<double, 6, 1> state; // current position and velocity
-    Eigen::Vector3d last_input; // input from parent node, which is current acceleration(rotation).
+    Eigen::Vector3d input; // input from parent node, which is current acceleration(rotation).
     // Eigen::Vector3d angle;
-    Eigen::Vector3d curr_input; // next rotation
     double duration;
     double timestamp;
 
     Eigen::Vector3i p_index;
     int t_index;
-    double g_score;
-    double h_score;
-    // double a_score;
-    double f_score;
+    double g_cost;
+    double h_cost;
+    // double a_cost;
+    double f_cost;
 
     TrajNode *parent;
     char node_state;
@@ -47,7 +46,7 @@ typedef TrajNode* TrajNodePtr;
 class NodeComparator {
 public:
     bool operator()(TrajNodePtr node1, TrajNodePtr node2) {
-        return node1->f_score > node2->f_score;
+        return node1->f_cost > node2->f_cost;
     }
 };
 
@@ -93,7 +92,7 @@ public:
 
 class RotationAstar{
 private:
-    // data
+    // data 
     std::vector<TrajNodePtr> traj_nodes_mem_;
     std::vector<TrajNodePtr> full_traj_nodes_;
     std::priority_queue<TrajNodePtr, std::vector<TrajNodePtr>, NodeComparator> open_set_;
@@ -107,8 +106,8 @@ private:
     // searching parameters
     double tau_;
     double max_vel_, max_acc_;
-    double rho_, horizon_, lambda_h_;
-    int memory_size_, safety_check_;
+    double rho_t_, horizon_, lambda_h_;
+    int memory_size_, collision_check_;
 
     // map data
     std::shared_ptr<inverted_planner::GridMap> gridmap_;
@@ -126,11 +125,12 @@ private:
 
 
     // state transition
-    void stateTransition(Eigen::Matrix<double, 6, 1> &state_i,
+    void stateTransition(Eigen::Matrix<double, 6, 1> state_i,
                          Eigen::Matrix<double, 6, 1> &state_f,
                          Eigen::Vector3d input, double tau);
 
     // get heuristic
+    double getHeuristicCost(Eigen::Matrix<double, 6, 1> state_i, Eigen::Matrix<double, 6, 1> state_f);
 
 public:
     RotationAstar();
@@ -144,6 +144,7 @@ public:
     void setGridMap(const std::shared_ptr<inverted_planner::GridMap> &gridmap);
 
     // get trajectory
+    std::vector<Eigen::Vector3d> getSampleTraj(double sample_rate);
 
     // enum
     // {

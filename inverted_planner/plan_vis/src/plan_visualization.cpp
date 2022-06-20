@@ -7,9 +7,10 @@ PlanVisualization::PlanVisualization(ros::NodeHandle &nh)
     nh_ = nh;
     control_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/control_point", 2);
     trajectory_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/trajectory_point", 2);
+    astar_sample_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/astar_sample_point", 2);
 }
 
-// real ids used: {id, id+1000}
+// sphere and line
 void PlanVisualization::displayMarkerList(ros::Publisher &pub, const vector<Eigen::Vector3d> &list, double scale,
                                             Eigen::Vector4d color, int id)
 {
@@ -63,7 +64,7 @@ void PlanVisualization::displayControlPointList(Eigen::MatrixXd ctrl_pts, int id
     displayMarkerList(control_point_pub_, list, 0.15, color, id);
 }
 
-void PlanVisualization::displayTrajectoryPointList(Eigen::MatrixXd ctrl_pts, int id)
+void PlanVisualization::displayTrajectoryPointList(Eigen::MatrixXd traj_pts, int id)
 {
     // if (control_point_pub_.getNumSubscribers() == 0)
     // {
@@ -71,13 +72,18 @@ void PlanVisualization::displayTrajectoryPointList(Eigen::MatrixXd ctrl_pts, int
     // }
     
     vector<Eigen::Vector3d> list;
-    for (int i = 0; i < ctrl_pts.cols(); i++)
+    for (int i = 0; i < traj_pts.cols(); i++)
     {
-        Eigen::Vector3d pt = ctrl_pts.col(i).transpose();
+        Eigen::Vector3d pt = traj_pts.col(i).transpose();
         list.push_back(pt);
     }
     Eigen::Vector4d color(0, 1, 0, 1);
     displayMarkerList(trajectory_point_pub_, list, 0.05, color, id);
+}
+
+void PlanVisualization::displayAstarSamplePointList(vector<Eigen::Vector3d> astar_sample_pts, int id){
+    Eigen::Vector4d color(1, 1, 0, 1);
+    displayMarkerList(astar_sample_point_pub_, astar_sample_pts, 0.05, color, id);
 }
 
 } // namespace inverted_planner
