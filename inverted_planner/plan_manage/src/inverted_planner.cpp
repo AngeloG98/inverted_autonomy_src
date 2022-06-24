@@ -20,7 +20,7 @@ InvertedPlanner::InvertedPlanner(const ros::NodeHandle &nh,
     Eigen::Vector3d start_pos(-3, 0, 15);
     Eigen::Vector3d start_vel(3,0,0);
     Eigen::Vector3d start_acc(0,0,0);
-    Eigen::Vector3d end_pos(3, 0, 12);
+    Eigen::Vector3d end_pos(3, 0, 15);
     Eigen::Vector3d end_vel(3,0,0);
     double start_time = 0.0;
     ROS_INFO("Start rotation a star searching...");

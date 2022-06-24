@@ -19,11 +19,11 @@ void RotationAstar::init(){
     tau_ = 0.1;
     max_vel_ = 100.0;
     max_acc_ = 2.0;
-    rho_t_ = 1.0;
+    rho_t_ = 10000.0;
     horizon_ = 100.0;
-    lambda_h_ = 100.0;
+    lambda_h_ = 1.0;
     memory_size_ = 100000;
-    collision_check_ = 5;
+    collision_check_ = 10;
     transition_ = Eigen::MatrixXd::Identity(6, 6);
 
     // init memory
@@ -78,6 +78,32 @@ int RotationAstar::timeToIndex(double time){
     return index;
 }
 
+void RotationAstar::getRotationInput(TrajNodePtr curr_node, std::vector<Eigen::Vector3d> &input_list,
+                                     std::vector<Eigen::Vector3d> &rot_list){
+    double gravity = 9.80;
+    // phi list
+    std::vector<double> phi_list {curr_node->rotation(0) - M_PI / 3, curr_node->rotation(0), curr_node->rotation(0) + M_PI / 3};
+
+    // fz list
+    std::vector<double> fz_list {0.5*gravity, gravity, 1.8*gravity};
+
+    // input list
+    // for (double theta = -M_PI / 18; theta <= M_PI / 18; theta += M_PI / 18)
+    double theta = 0.0;
+        for (int i = 0; i < phi_list.size(); i++){
+            double tmp_phi = phi_list[i];
+            for (int j = 0; j < fz_list.size(); j++){
+                double tmp_fz = fz_list[j];
+                Eigen::Vector3d rot(tmp_phi, theta, 0.0);
+                Eigen::Vector3d input(-tmp_fz * sin(theta),
+                                      tmp_fz * sin(tmp_phi) * cos(theta),
+                                      -(gravity - tmp_fz * cos(tmp_phi) * cos(theta)));
+                rot_list.push_back(rot);
+                input_list.push_back(input);
+            }
+        }
+}
+
 void RotationAstar::stateTransition(Eigen::Matrix<double, 6, 1> state_i, Eigen::Matrix<double, 6, 1> &state_f,
                      Eigen::Vector3d input, double tau){
     // state
@@ -97,7 +123,7 @@ void RotationAstar::stateTransition(Eigen::Matrix<double, 6, 1> state_i, Eigen::
 double RotationAstar::getHeuristicCost(Eigen::Matrix<double, 6, 1> state_i, Eigen::Matrix<double, 6, 1> state_f){
     Eigen::Vector3d pos_i = state_i.head(3);
     Eigen::Vector3d pos_f = state_f.head(3);
-    return (pos_i - pos_f).norm();
+    return (pos_i - pos_f).norm() / 10.0;
 }
 
 int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, Eigen::Vector3d start_acc,
@@ -118,12 +144,13 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
     curr_node->state.head(3) = start_pos;
     curr_node->state.tail(3) = start_vel;
     curr_node->input = start_acc;
+    curr_node->rotation << 0.0, 0.0, 0.0; // from flatness 
     curr_node->duration = 0.0;
     curr_node->timestamp = start_time;
     curr_node->p_index = posToIndex(start_pos);
     curr_node->t_index = timeToIndex(start_time);
     curr_node->g_cost = 0.0;
-    curr_node->h_cost = getHeuristicCost(curr_node->state, end_state);
+    curr_node->h_cost = rho_t_ * getHeuristicCost(curr_node->state, end_state);
     curr_node->f_cost = curr_node->g_cost + lambda_h_ * curr_node->h_cost;
 
     // start open set and hashtable
@@ -140,7 +167,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
 
         // terminal condition
         bool near_end = (curr_node->p_index - end_p_index).norm() <= 2*inv_resolution_;
-        // bool near_end = (curr_node->state.head(3)[0] > end_pos[0]);
+        // bool near_end = (curr_node->state.head(3)[0] >= 2.0);
         bool reach_horizon = (curr_node->state.head(3) - end_state.head(3)).norm() >= horizon_;
 
         if (near_end || reach_horizon){
@@ -161,20 +188,26 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
         double next_time;
         std::vector<TrajNodePtr> neighboor_nodes;
         Eigen::Vector3d input;
+        Eigen::Vector3d rotation;
         std::vector<Eigen::Vector3d> input_list;
+        std::vector<Eigen::Vector3d> rot_list;
 
         // normal input list
-        // for (double ax = -max_acc_; ax <= max_acc_ + 1e-3; ax += max_acc_ )
-        double ax = 0.0;
-            for (double ay = -max_acc_; ay <= max_acc_ + 1e-3; ay += max_acc_)
-            // double ay = 0.0;
-                for (double az = -5*max_acc_; az <= 5*max_acc_ + 1e-3; az += max_acc_ ){
-                    input << ax, ay, az;
-                    input_list.push_back(input);
-                }
+        // // for (double ax = -max_acc_; ax <= max_acc_ + 1e-3; ax += max_acc_ )
+        // double ax = 0.0;
+        //     // for (double ay = -max_acc_; ay <= max_acc_ + 1e-3; ay += max_acc_)
+        //     double ay = 0.0;
+        //         for (double az = -5*max_acc_; az <= 5*max_acc_ + 1e-3; az += max_acc_ ){
+        //             input << ax, ay, az;
+        //             input_list.push_back(input);
+        //         }
+        
+        // rotation aware input list
+        getRotationInput(curr_node, input_list, rot_list);
 
         for (int i = 0; i < input_list.size(); ++i){
             input = input_list[i];
+            rotation = rot_list[i];
             stateTransition(curr_state, next_state, input, tau_);
 
             next_time = curr_node->timestamp + tau_;
@@ -182,8 +215,6 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
             Eigen::Vector3d next_vel = next_state.tail(3);
             int next_t_index = timeToIndex(next_time);
             Eigen::Vector3i next_p_index = posToIndex(next_pos);
-            
-            std::cout <<" x: "<< next_pos(0) <<" y: "<< next_pos(1)<<" z: "<< next_pos(2)<< std::endl;
 
             // check node if ever been expanded and if closed
             TrajNodePtr next_node = expanded_nodes_.findNode(next_p_index, next_t_index);
@@ -221,16 +252,41 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
 
             // get node cost
             double node_g_cost = (input.squaredNorm() + rho_t_) * tau_ + curr_node->g_cost;
-            double node_h_cost = getHeuristicCost(next_state, end_state);
+            double node_h_cost = rho_t_ * getHeuristicCost(next_state, end_state);
             double node_f_cost = node_g_cost + lambda_h_ * node_h_cost;
 
+            // Compare nodes expanded from the same parent
+            bool prune = false;
+            for (int j = 0; j < neighboor_nodes.size(); ++j)
+            {
+                TrajNodePtr neighboor_node = neighboor_nodes[j];
+                if ((next_p_index - neighboor_node->p_index).norm() == 0 && next_t_index == neighboor_node->t_index)
+                {
+                    prune = true;
+                    if (node_f_cost < neighboor_node->f_cost)
+                    {
+                        neighboor_node->g_cost = node_g_cost;
+                        neighboor_node->h_cost = node_h_cost;
+                        neighboor_node->f_cost = node_f_cost;
+                        neighboor_node->state = next_state;
+                        neighboor_node->input = input;
+                        neighboor_node->duration = tau_;
+                        next_node->timestamp = next_time;
+                        break;
+                    }
+                }
+            }
+
             // update 
+            if (!prune)
+            {
             if (next_node == NULL){
                 // allocate memory and update node info
                 next_node = traj_nodes_mem_[used_node_num_];
                 next_node->parent = curr_node;
                 next_node->state = next_state;
                 next_node->input = input;
+                next_node->rotation = rotation;
                 next_node->duration = tau_;
                 next_node->timestamp = next_time;
                 next_node->p_index = next_p_index;
@@ -243,6 +299,13 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                 // update open set and hashtable
                 open_set_.push(next_node);
                 expanded_nodes_.insertNode(next_node->p_index, next_node->t_index, next_node);
+                neighboor_nodes.push_back(next_node);
+
+                std::cout <<" r : "<< resolution_ ;
+                std::cout <<" x: "<< next_pos(0) <<" y: "<< next_pos(1)<<" z: "<< next_pos(2);
+                std::cout <<" p index: "<< next_node->p_index(0) <<" y: "<< next_node->p_index(1)<<" z: "<< next_node->p_index(2);
+                std::cout <<" t index: "<< next_node->t_index ;
+                std::cout <<"  last g:"<<curr_node->g_cost<<" node_g_cost: "<< node_g_cost <<" node_h_cost: "<< node_h_cost << std::endl;
 
                 // update mem count
                 used_node_num_ += 1;
@@ -253,10 +316,11 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                 }
             } else if (next_node->node_state == OPEN){
                 if (node_f_cost < next_node->f_cost){
-                    ROS_WARN("Rearrange openset may needed!");
+                    // ROS_WARN("Rearrange openset may needed!");
                     next_node->parent = curr_node;
                     next_node->state = next_state;
                     next_node->input = input;
+                    next_node->rotation = rotation;
                     next_node->timestamp = next_time;
                     next_node->g_cost = node_g_cost;
                     next_node->h_cost = node_h_cost;
@@ -264,6 +328,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                 }
             } else {
                 ROS_WARN("Node state: CLOSED!");
+            }
             }
         }
     }
@@ -280,6 +345,13 @@ void RotationAstar::getFullTraj(TrajNodePtr end_node){
         full_traj_nodes_.push_back(node);
     }
     reverse(full_traj_nodes_.begin(), full_traj_nodes_.end());
+    
+    // display
+    for (int i = 0; i < full_traj_nodes_.size();i++){
+        std::cout << i << "  =====================" << std::endl;
+        std::cout << " x: " << full_traj_nodes_[i]->state.head(3)(0) << " y: " << full_traj_nodes_[i]->state.head(3)(1) << " z: " << full_traj_nodes_[i]->state.head(3)(2) << std::endl;
+        std::cout << " roll: "<< full_traj_nodes_[i]->rotation(0) <<" pitch: "<< full_traj_nodes_[i]->rotation(1) << std::endl;
+    }
 }
 
 std::vector<Eigen::Vector3d> RotationAstar::getSampleTraj(double sample_rate){

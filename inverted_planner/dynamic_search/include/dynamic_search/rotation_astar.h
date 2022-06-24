@@ -21,7 +21,7 @@ struct TrajNode
 
     Eigen::Matrix<double, 6, 1> state; // current position and velocity
     Eigen::Vector3d input; // input from parent node, which is current acceleration(rotation).
-    // Eigen::Vector3d angle;
+    Eigen::Vector3d rotation;
     double duration;
     double timestamp;
 
@@ -120,9 +120,10 @@ private:
     Eigen::Vector3i posToIndex(Eigen::Vector3d pos);
     int timeToIndex(double time);
 
+    // get rotation aware input
+    void getRotationInput(TrajNodePtr curr_node, std::vector<Eigen::Vector3d> &input_list, std::vector<Eigen::Vector3d> &rot_list);
     // get trajectory -> full_traj_nodes_
     void getFullTraj(TrajNodePtr end_node);
-
 
     // state transition
     void stateTransition(Eigen::Matrix<double, 6, 1> state_i,

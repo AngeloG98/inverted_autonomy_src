@@ -72,8 +72,8 @@ public:
     inline void indexToPos(const Eigen::Vector3i& id, Eigen::Vector3d& pos) {
         for (int i = 0; i < 3; ++i) pos(i) = (id(i) + 0.5) * map_data_->resolution + map_data_->map_origin(i);
     }
-    
-    inline void getMapInfo(Eigen::Vector3d& origin, Eigen::Vector3d& size, double resolution){
+
+    inline void getMapInfo(Eigen::Vector3d &origin, Eigen::Vector3d &size, double &resolution){
         origin = map_data_->map_origin;
         size = map_data_->map_size;
         resolution = map_data_->resolution;
