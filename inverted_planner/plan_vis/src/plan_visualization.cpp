@@ -8,6 +8,7 @@ PlanVisualization::PlanVisualization(ros::NodeHandle &nh)
     control_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/control_point", 2);
     trajectory_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/trajectory_point", 2);
     astar_sample_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/astar_sample_point", 2);
+    astar_sample_arrow_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("/plan_vis/astar_sample_arrow", 2);
     astar_exp_point_pub_ = nh_.advertise<visualization_msgs::Marker>("/plan_vis/astar_exp_point", 2);
 }
 
@@ -50,9 +51,45 @@ void PlanVisualization::displayMarkerList(ros::Publisher &pub, const vector<Eige
     } else {
         pub.publish(sphere);
     }
-
 }
 
+void PlanVisualization::displayArrowMarkerList(ros::Publisher &pub, const vector<Eigen::Vector3d> &pt_list,
+                                               const vector<Eigen::Vector3d> &force_list, double scale,
+                                               Eigen::Vector4d color, int id){
+    visualization_msgs::MarkerArray arrow_list;
+    visualization_msgs::Marker arrow;
+    arrow.type = visualization_msgs::Marker::ARROW;
+    arrow.header.frame_id = "map";
+    arrow.header.stamp = ros::Time::now();
+    arrow.action = visualization_msgs::Marker::ADD;
+    arrow.scale.x = scale;
+    arrow.scale.y = 2*scale;
+    arrow.scale.z = 0;
+    arrow.color.r = color(0);
+    arrow.color.g = color(1);
+    arrow.color.b = color(2);
+    arrow.color.a = color(3) > 1e-5 ? color(3) : 1.0;
+    arrow.pose.orientation.w = 1.0;
+    for (int i = 0; i < pt_list.size(); i++)
+    {
+        arrow.points.clear();
+        geometry_msgs::Point p_i, p_f;
+        double norm_fz;
+   
+        norm_fz = force_list[i].norm();
+        p_i.x = pt_list[i](0);
+        p_i.y = pt_list[i](1);
+        p_i.z = pt_list[i](2);
+        p_f.x = p_i.x + force_list[i](0)/20.0;
+        p_f.y = p_i.y + force_list[i](1)/20.0;
+        p_f.z = p_i.z + force_list[i](2)/20.0;
+        arrow.points.push_back(p_i);
+        arrow.points.push_back(p_f);
+        arrow_list.markers.push_back(arrow);
+        arrow.id++;
+    }
+    pub.publish(arrow_list);
+}
 
 void PlanVisualization::displayControlPointList(Eigen::MatrixXd ctrl_pts, int id)
 {
@@ -88,9 +125,13 @@ void PlanVisualization::displayTrajectoryPointList(Eigen::MatrixXd traj_pts, int
     displayMarkerList(trajectory_point_pub_, list, 0.05, color, id, true);
 }
 
-void PlanVisualization::displayAstarSamplePointList(vector<Eigen::Vector3d> astar_sample_pts, int id){
+void PlanVisualization::displayAstarSamplePointList(vector<Eigen::Vector3d> astar_sample_pts,
+                                                    vector<Eigen::Vector3d> astar_sample_fzs, int id)
+{
     Eigen::Vector4d color(1, 1, 0, 1);
     displayMarkerList(astar_sample_point_pub_, astar_sample_pts, 0.05, color, id, true);
+    Eigen::Vector4d color_arr(0, 1, 0, 1);
+    displayArrowMarkerList(astar_sample_arrow_pub_, astar_sample_pts, astar_sample_fzs, 0.02, color_arr, id + 500);
 }
 
 void PlanVisualization::displayAstarExpandedPointList(vector<Eigen::Vector3d> astar_exp_pts, int id){

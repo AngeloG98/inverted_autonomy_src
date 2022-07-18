@@ -13,15 +13,15 @@ InvertedPlanner::InvertedPlanner(const ros::NodeHandle &nh,
     start_plan_sub_ = nh_.subscribe("trigger/bspline_plan", 1, &InvertedPlanner::startPlanCallback, this);
     trajectory_point_pub_ = nh_.advertise<flight_msgs::TrajectoryPoint>("trajectory_points/bspline", 1);
     plan_timer_ = nh_.createTimer(ros::Duration(1.0 / 300), &InvertedPlanner::planPubCallback, this);
-    plan_vis_timer_ = nh_.createTimer(ros::Duration(1.0 / 5), &InvertedPlanner::planVisCallback, this);
+    plan_vis_timer_ = nh_.createTimer(ros::Duration(1.0 / 1), &InvertedPlanner::planVisCallback, this);
 
     rot_astar_->setGridMap(global_gridmap_);
     rot_astar_->init();
     Eigen::Vector3d start_pos(-3, 0, 15);
-    Eigen::Vector3d start_vel(3,0,0);
+    Eigen::Vector3d start_vel(4,0,0);
     Eigen::Vector3d start_acc(0,0,0);
     Eigen::Vector3d end_pos(3, 0, 15);
-    Eigen::Vector3d end_vel(3,0,0);
+    Eigen::Vector3d end_vel(4,0,0);
     double start_time = 0.0;
     ROS_INFO("Start rotation a star searching...");
     int astar_traj = rot_astar_->search(start_pos, start_vel, start_acc, end_pos, end_vel, start_time);
@@ -96,9 +96,11 @@ void InvertedPlanner::planVisCallback(const ros::TimerEvent &time){
     // plan_visualizer_->displayTrajectoryPointList(trajectory_points, 1);
 
     /*  a-star  */
-    double sample_rate = 1; // here, d_t = tau / sample_rate
-    std::vector<Eigen::Vector3d> astar_sample_pts = rot_astar_->getSampleTraj(sample_rate);
-    plan_visualizer_->displayAstarSamplePointList(astar_sample_pts, 1);
+    double sample_rate = 10.0; // here, d_t = tau / sample_rate
+    std::vector<Eigen::Vector3d> astar_sample_pts;
+    std::vector<Eigen::Vector3d> astar_sample_fzs;
+    rot_astar_->getSampleTraj(sample_rate, astar_sample_pts, astar_sample_fzs);
+    plan_visualizer_->displayAstarSamplePointList(astar_sample_pts, astar_sample_fzs, 1);
 
     std::vector<Eigen::Vector3d> astar_exp_pts = rot_astar_->getExpandedPoint();
     plan_visualizer_->displayAstarExpandedPointList(astar_exp_pts, 1);

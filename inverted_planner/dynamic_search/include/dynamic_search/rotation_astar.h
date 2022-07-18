@@ -102,6 +102,7 @@ private:
     int step_num_;
 
     Eigen::Matrix<double, 6, 6> transition_;
+    double gravity_;
 
     // searching parameters
     double tau_;
@@ -145,7 +146,8 @@ public:
     void setGridMap(const std::shared_ptr<inverted_planner::GridMap> &gridmap);
 
     // get trajectory
-    std::vector<Eigen::Vector3d> getSampleTraj(double sample_rate);
+    void getSampleTraj(double sample_rate, std::vector<Eigen::Vector3d> &pos_sample_list,
+                       std::vector<Eigen::Vector3d> &force_sample_list);
     std::vector<Eigen::Vector3d> getExpandedPoint();
 
     // enum

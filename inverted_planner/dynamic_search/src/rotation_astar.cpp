@@ -25,6 +25,7 @@ void RotationAstar::init(){
     memory_size_ = 100000;
     collision_check_ = 10;
     transition_ = Eigen::MatrixXd::Identity(6, 6);
+    gravity_ = 9.80;
 
     // init memory
     traj_nodes_mem_.resize(memory_size_);
@@ -80,15 +81,14 @@ int RotationAstar::timeToIndex(double time){
 
 void RotationAstar::getRotationInput(TrajNodePtr curr_node, std::vector<Eigen::Vector3d> &input_list,
                                      std::vector<Eigen::Vector3d> &rot_list){
-    double gravity = 9.80;
     // phi list
     std::vector<double> phi_list {curr_node->rotation(0) - M_PI / 3, curr_node->rotation(0), curr_node->rotation(0) + M_PI / 3};
 
     // fz list
-    std::vector<double> fz_list {0.5*gravity, gravity, 1.8*gravity};
+    std::vector<double> fz_list {0.5*gravity_, gravity_, 1.8*gravity_};
 
     // input list
-    // for (double theta = -M_PI / 18; theta <= M_PI / 18; theta += M_PI / 18)
+    // for (double theta = -M_PI / 6; theta <= M_PI / 6; theta += M_PI / 6)
     double theta = 0.0;
         for (int i = 0; i < phi_list.size(); i++){
             double tmp_phi = phi_list[i];
@@ -97,7 +97,7 @@ void RotationAstar::getRotationInput(TrajNodePtr curr_node, std::vector<Eigen::V
                 Eigen::Vector3d rot(tmp_phi, theta, 0.0);
                 Eigen::Vector3d input(-tmp_fz * sin(theta),
                                       tmp_fz * sin(tmp_phi) * cos(theta),
-                                      -(gravity - tmp_fz * cos(tmp_phi) * cos(theta)));
+                                      -(gravity_ - tmp_fz * cos(tmp_phi) * cos(theta)));
                 rot_list.push_back(rot);
                 input_list.push_back(input);
             }
@@ -166,8 +166,8 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
         curr_node = open_set_.top();
 
         // terminal condition
-        bool near_end = (curr_node->p_index - end_p_index).norm() <= 2*inv_resolution_;
-        // bool near_end = (curr_node->state.head(3)[0] >= 2.0);
+        // bool near_end = (curr_node->p_index - end_p_index).norm() <= 2*inv_resolution_;
+        bool near_end = (curr_node->state.head(3)[0] >= 2.0);
         bool reach_horizon = (curr_node->state.head(3) - end_state.head(3)).norm() >= horizon_;
 
         if (near_end || reach_horizon){
@@ -270,6 +270,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                         neighboor_node->f_cost = node_f_cost;
                         neighboor_node->state = next_state;
                         neighboor_node->input = input;
+                        neighboor_node->rotation = rotation;
                         neighboor_node->duration = tau_;
                         next_node->timestamp = next_time;
                         break;
@@ -351,17 +352,20 @@ void RotationAstar::getFullTraj(TrajNodePtr end_node){
         std::cout << i << "  =====================" << std::endl;
         std::cout << " x: " << full_traj_nodes_[i]->state.head(3)(0) << " y: " << full_traj_nodes_[i]->state.head(3)(1) << " z: " << full_traj_nodes_[i]->state.head(3)(2) << std::endl;
         std::cout << " roll: "<< full_traj_nodes_[i]->rotation(0) <<" pitch: "<< full_traj_nodes_[i]->rotation(1) << std::endl;
+        std::cout << " input x: "<< full_traj_nodes_[i]->input(0) <<" input y: "<< full_traj_nodes_[i]->input(1) <<" input z: "<< full_traj_nodes_[i]->input(2)<< std::endl;
+
     }
 }
 
-std::vector<Eigen::Vector3d> RotationAstar::getSampleTraj(double sample_rate){
-    std::vector<Eigen::Vector3d> pos_sample_list;
-
+void RotationAstar::getSampleTraj(double sample_rate, std::vector<Eigen::Vector3d> &pos_sample_list,
+                                  std::vector<Eigen::Vector3d> &force_sample_list)
+{
     if (!full_traj_nodes_.empty()){
         TrajNodePtr node = full_traj_nodes_.back();
         Eigen::Matrix<double, 6, 1> state_i;
         Eigen::Matrix<double, 6, 1> state_f;
         Eigen::Vector3d input;
+        Eigen::Vector3d g(0,0,gravity_);
         double duration;
 
         while (node->parent != NULL){
@@ -372,14 +376,16 @@ std::vector<Eigen::Vector3d> RotationAstar::getSampleTraj(double sample_rate){
             for (double d_tau = duration; d_tau >= -1e-5; d_tau -= duration / sample_rate){
                 stateTransition(state_i, state_f, input, d_tau);
                 pos_sample_list.push_back(state_f.head(3));
+                std::cout << "input " << input <<std::endl;
+                std::cout << " f" << input + g << std::endl;
+                force_sample_list.push_back(input + g);
             }
 
             node = node->parent;
         }
         reverse(pos_sample_list.begin(), pos_sample_list.end());
+        reverse(force_sample_list.begin(), force_sample_list.end());
     }
-
-    return pos_sample_list;
 }
 
 std::vector<Eigen::Vector3d> RotationAstar::getExpandedPoint(){

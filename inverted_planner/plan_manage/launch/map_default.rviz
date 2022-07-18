@@ -57,7 +57,7 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 15
+        Max Value: 20
         Min Value: 12
         Value: true
       Axis: Z
@@ -98,6 +98,14 @@ Visualization Manager:
         "": true
       Queue Size: 100
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /plan_vis/astar_sample_arrow
+      Name: MarkerArray
+      Namespaces:
+        "": true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -126,7 +134,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 22.37042999267578
+      Distance: 27.739334106445312
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
