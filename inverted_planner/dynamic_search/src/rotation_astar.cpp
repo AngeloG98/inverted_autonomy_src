@@ -406,7 +406,7 @@ void RotationAstar::getFullTraj(TrajNodePtr end_node){
     }
 }
 
-void RotationAstar::getSampleTraj(double sample_rate, std::vector<Eigen::Vector3d> &pos_sample_list,
+void RotationAstar::getSampleTraj(double sample_ts, std::vector<Eigen::Vector3d> &pos_sample_list,
                                   std::vector<Eigen::Vector3d> &force_sample_list)
 {
     if (!full_traj_nodes_.empty()){
@@ -422,7 +422,7 @@ void RotationAstar::getSampleTraj(double sample_rate, std::vector<Eigen::Vector3
             input = node->input;
             duration = node->duration;
 
-            for (double d_tau = duration; d_tau >= -1e-5; d_tau -= duration / sample_rate){
+            for (double d_tau = duration; d_tau >= 1e-5; d_tau -= sample_ts){
                 stateTransition(state_i, state_f, input, d_tau);
                 pos_sample_list.push_back(state_f.head(3));
                 // std::cout << "input " << input <<std::endl;

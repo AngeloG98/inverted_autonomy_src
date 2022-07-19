@@ -10,11 +10,6 @@ InvertedPlanner::InvertedPlanner(const ros::NodeHandle &nh,
     global_gridmap_ = std::make_shared<inverted_planner::GridMap>(nh_);
     rot_astar_ = std::make_shared<inverted_planner::RotationAstar>();
 
-    start_plan_sub_ = nh_.subscribe("trigger/bspline_plan", 1, &InvertedPlanner::startPlanCallback, this);
-    trajectory_point_pub_ = nh_.advertise<flight_msgs::TrajectoryPoint>("trajectory_points/bspline", 1);
-    plan_timer_ = nh_.createTimer(ros::Duration(1.0 / 300), &InvertedPlanner::planPubCallback, this);
-    plan_vis_timer_ = nh_.createTimer(ros::Duration(1.0 / 1), &InvertedPlanner::planVisCallback, this);
-
     rot_astar_->setGridMap(global_gridmap_);
     rot_astar_->init();
     Eigen::Vector3d start_pos(-4.1, 0, 6);
@@ -28,47 +23,30 @@ InvertedPlanner::InvertedPlanner(const ros::NodeHandle &nh,
     ROS_INFO("Finish rotation a star searching: %d]", astar_traj);
 
     // cubic b-spline
-    Eigen::MatrixXd control_points(3,14);
-    double ts = 10.0;
+    double a_sample_ts = 0.05; // here, d_t = tau / sample_rate
+    std::vector<Eigen::Vector3d> astar_sample_pts;
+    std::vector<Eigen::Vector3d> astar_sample_fzs;
+    rot_astar_->getSampleTraj(a_sample_ts, astar_sample_pts, astar_sample_fzs);
+    Eigen::MatrixXd control_points(3,3+astar_sample_pts.size());
+    double ts = 0.05;
     for (int i = 0; i < 3; i++)
     {
-        control_points(0, i) = 0.0;
-        control_points(1, i) = 0.0;
-        control_points(2, i) = -20.0;
+        control_points(0, i) = start_pos(0)-3*(2-i)*ts;
+        control_points(1, i) = start_pos(1);
+        control_points(2, i) = start_pos(2);
     }
-    for (int i = 3; i < 6; i++)
+    for (int i = 3; i < 3+astar_sample_pts.size(); i++)
     {
-        control_points(0, i) = (i-2)*ts;
-        control_points(1, i) = 0.0;
-        control_points(2, i) = -20.0 + (i-2)*ts/2;
-    }
-    control_points(0, 6) = (5-2)*ts + 20;
-    control_points(1, 6) = 30;
-    control_points(2, 6) = -20.0;
-
-    control_points(0, 7) = (5-2)*ts + 40;
-    control_points(1, 7) = 30;
-    control_points(2, 7) = -20.0;
-
-    control_points(0, 8) = (5-2)*ts + 60;
-    control_points(1, 8) = 5;
-    control_points(2, 8) = -20.0;
-
-    control_points(0, 9) = (5-2)*ts + 80;
-    control_points(1, 9) = -10.0;
-    control_points(2, 9) = -20.0- 10.0;
-
-    control_points(0, 10) = (5-2)*ts + 80;
-    control_points(1, 10) = -25.0;
-    control_points(2, 10) = -20.0 - 10.0;
-
-    for (int i = 11; i < (11+3); i++)
-    {
-        control_points(0, i) = (5-2)*ts + 50;
-        control_points(1, i) = -25.0;
-        control_points(2, i) = -20.0 - 10.0;
+        control_points(0, i) = astar_sample_pts[i-3](0);
+        control_points(1, i) = astar_sample_pts[i-3](1);
+        control_points(2, i) = astar_sample_pts[i-3](2);
     }
     plan_manager_->cubicBsplineFromControlPoint(control_points, ts);
+
+    start_plan_sub_ = nh_.subscribe("trigger/bspline_plan", 1, &InvertedPlanner::startPlanCallback, this);
+    trajectory_point_pub_ = nh_.advertise<flight_msgs::TrajectoryPoint>("trajectory_points/bspline", 1);
+    plan_timer_ = nh_.createTimer(ros::Duration(1.0 / 300), &InvertedPlanner::planPubCallback, this);
+    plan_vis_timer_ = nh_.createTimer(ros::Duration(1.0 / 1), &InvertedPlanner::planVisCallback, this);
 }
 
 void InvertedPlanner::startPlanCallback(const std_msgs::Int32 &msg){
@@ -79,27 +57,28 @@ void InvertedPlanner::startPlanCallback(const std_msgs::Int32 &msg){
 
 void InvertedPlanner::planVisCallback(const ros::TimerEvent &time){
     /*  b-spline  */
-    // double T = plan_manager_->local_traj_.position_traj_.getTimeSum();
-    // double sample_rate = 1;
-    // const int num = T * sample_rate;
+    double T = plan_manager_->local_traj_.position_traj_.getTimeSum();
+    double b_sample_rate = 100;
+    const int num = T * b_sample_rate;
 
-    // // visualize control points
-    // plan_visualizer_->displayControlPointList(plan_manager_->local_traj_.position_traj_.get_control_points(), 0);
-    // // visualize trajectory points
-    // Eigen::MatrixXd trajectory_points(3, num);
-    // for (int i = 0; i < T * sample_rate; i++){
-    //     Eigen::VectorXd point_i = plan_manager_->local_traj_.position_traj_.evaluateDeBoorT(i/sample_rate);
-    //     trajectory_points(0, i) = point_i(0);
-    //     trajectory_points(1, i) = point_i(1);
-    //     trajectory_points(2, i) = point_i(2);
-    // }
-    // plan_visualizer_->displayTrajectoryPointList(trajectory_points, 1);
+    // visualize control points
+    plan_visualizer_->displayControlPointList(plan_manager_->local_traj_.position_traj_.get_control_points(), 0);
+    // visualize trajectory points
+    Eigen::MatrixXd trajectory_points(3, num);
+    for (int i = 0; i < T * b_sample_rate - 1; i++){
+        Eigen::VectorXd point_i = plan_manager_->local_traj_.position_traj_.evaluateDeBoorT(i/b_sample_rate);
+        trajectory_points(0, i) = point_i(0);
+        trajectory_points(1, i) = point_i(1);
+        trajectory_points(2, i) = point_i(2);
+    }
+    plan_visualizer_->displayTrajectoryPointList(trajectory_points, 1);
+    
 
     /*  a-star  */
-    double sample_rate = 10.0; // here, d_t = tau / sample_rate
+    double a_sample_ts = 0.01; // here, d_t = tau / sample_rate
     std::vector<Eigen::Vector3d> astar_sample_pts;
     std::vector<Eigen::Vector3d> astar_sample_fzs;
-    rot_astar_->getSampleTraj(sample_rate, astar_sample_pts, astar_sample_fzs);
+    rot_astar_->getSampleTraj(a_sample_ts, astar_sample_pts, astar_sample_fzs);
     plan_visualizer_->displayAstarSamplePointList(astar_sample_pts, astar_sample_fzs, 1);
 
     std::vector<Eigen::Vector3d> astar_exp_pts = rot_astar_->getExpandedPoint();

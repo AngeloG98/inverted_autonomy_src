@@ -104,7 +104,7 @@ void PlanVisualization::displayControlPointList(Eigen::MatrixXd ctrl_pts, int id
         Eigen::Vector3d pt = ctrl_pts.col(i).transpose();
         list.push_back(pt);
     }
-    Eigen::Vector4d color(1, 0, 0, 1);
+    Eigen::Vector4d color(0, 0, 1, 1);
     displayMarkerList(control_point_pub_, list, 0.15, color, id, true);
 }
 
@@ -121,7 +121,7 @@ void PlanVisualization::displayTrajectoryPointList(Eigen::MatrixXd traj_pts, int
         Eigen::Vector3d pt = traj_pts.col(i).transpose();
         list.push_back(pt);
     }
-    Eigen::Vector4d color(0, 1, 0, 1);
+    Eigen::Vector4d color(1, 0, 0, 1);
     displayMarkerList(trajectory_point_pub_, list, 0.05, color, id, true);
 }
 
@@ -129,7 +129,7 @@ void PlanVisualization::displayAstarSamplePointList(vector<Eigen::Vector3d> asta
                                                     vector<Eigen::Vector3d> astar_sample_fzs, int id)
 {
     Eigen::Vector4d color(1, 1, 0, 1);
-    displayMarkerList(astar_sample_point_pub_, astar_sample_pts, 0.05, color, id, true);
+    displayMarkerList(astar_sample_point_pub_, astar_sample_pts, 0.1, color, id, true);
     Eigen::Vector4d color_arr(0, 1, 0, 1);
     displayArrowMarkerList(astar_sample_arrow_pub_, astar_sample_pts, astar_sample_fzs, 0.02, color_arr, id + 500);
 }
