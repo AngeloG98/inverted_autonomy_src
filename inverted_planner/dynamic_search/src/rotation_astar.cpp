@@ -7,6 +7,7 @@ RotationAstar::RotationAstar(){}
 void RotationAstar::init(){
     // init map
     gridmap_->getMapInfo(map_origin_, map_size_, resolution_);
+    resolution_ = 0.1;
     inv_resolution_ = 1.0 / resolution_;
     ROS_INFO("Gridmap for rotation astar received: [map size x:%f, map size y:%f, map size z:%f]",
              map_size_(0), map_size_(1), map_size_(2));
@@ -79,27 +80,36 @@ int RotationAstar::timeToIndex(double time){
     return index;
 }
 
-void RotationAstar::getRotationInput(TrajNodePtr curr_node, std::vector<Eigen::Vector3d> &input_list,
-                                     std::vector<Eigen::Vector3d> &rot_list){
+Eigen::Vector3i RotationAstar::rotToIndex(Eigen::Vector3d rot){
+    Eigen::Vector3i index;
+    double inv_resolution_ = 12 / M_PI;
+    for (int i = 0; i < 3; ++i)
+        index(i) = floor((rot(i) - M_PI) * inv_resolution_);
+    return index;
+}
+
+void RotationAstar::getRotationInputPhiLarge(TrajNodePtr curr_node, std::vector<Eigen::Vector3d> &input_list,
+                                             std::vector<Eigen::Vector3d> &rot_list, std::vector<double> &fz_list){
     // phi list
-    std::vector<double> phi_list {curr_node->rotation(0) - M_PI / 3, curr_node->rotation(0), curr_node->rotation(0) + M_PI / 3};
+    std::vector<double> phi_list {curr_node->rotation(0) + M_PI / 6, curr_node->rotation(0), curr_node->rotation(0) - M_PI / 6};
 
     // fz list
-    std::vector<double> fz_list {0.5*gravity_, gravity_, 1.8*gravity_};
+    std::vector<double> fz_set {0.8*gravity_, gravity_, 1.5*gravity_};
 
     // input list
     // for (double theta = -M_PI / 6; theta <= M_PI / 6; theta += M_PI / 6)
     double theta = 0.0;
         for (int i = 0; i < phi_list.size(); i++){
             double tmp_phi = phi_list[i];
-            for (int j = 0; j < fz_list.size(); j++){
-                double tmp_fz = fz_list[j];
+            for (int j = 0; j < fz_set.size(); j++){
+                double tmp_fz = fz_set[j];
                 Eigen::Vector3d rot(tmp_phi, theta, 0.0);
                 Eigen::Vector3d input(-tmp_fz * sin(theta),
                                       tmp_fz * sin(tmp_phi) * cos(theta),
                                       -(gravity_ - tmp_fz * cos(tmp_phi) * cos(theta)));
                 rot_list.push_back(rot);
                 input_list.push_back(input);
+                fz_list.push_back(tmp_fz);
             }
         }
 }
@@ -149,6 +159,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
     curr_node->timestamp = start_time;
     curr_node->p_index = posToIndex(start_pos);
     curr_node->t_index = timeToIndex(start_time);
+    curr_node->r_index = rotToIndex(curr_node->rotation);
     curr_node->g_cost = 0.0;
     curr_node->h_cost = rho_t_ * getHeuristicCost(curr_node->state, end_state);
     curr_node->f_cost = curr_node->g_cost + lambda_h_ * curr_node->h_cost;
@@ -156,7 +167,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
     // start open set and hashtable
     curr_node->node_state = OPEN;
     open_set_.push(curr_node);
-    expanded_nodes_.insertNode(curr_node->p_index, curr_node->t_index, curr_node);
+    expanded_nodes_.insertNode(curr_node->p_index, curr_node->r_index, curr_node->t_index, curr_node);
     // start count
     used_node_num_ += 1;
 
@@ -187,8 +198,10 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
         Eigen::Matrix<double, 6, 1> next_state;
         double next_time;
         std::vector<TrajNodePtr> neighboor_nodes;
+        double fz;
         Eigen::Vector3d input;
         Eigen::Vector3d rotation;
+        std::vector<double> fz_list;
         std::vector<Eigen::Vector3d> input_list;
         std::vector<Eigen::Vector3d> rot_list;
 
@@ -203,11 +216,15 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
         //         }
         
         // rotation aware input list
-        getRotationInput(curr_node, input_list, rot_list);
+        getRotationInputPhiLarge(curr_node, input_list, rot_list, fz_list);
 
         for (int i = 0; i < input_list.size(); ++i){
+            fz = fz_list[i];
             input = input_list[i];
             rotation = rot_list[i];
+            Eigen::Vector3i next_r_index = rotToIndex(rotation);
+            // std::cout << "unexpand============================" << std::endl;
+            // std::cout << "fz" << fz << "input" << input << "rot" << rotation << std::endl;
             stateTransition(curr_state, next_state, input, tau_);
 
             next_time = curr_node->timestamp + tau_;
@@ -215,11 +232,13 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
             Eigen::Vector3d next_vel = next_state.tail(3);
             int next_t_index = timeToIndex(next_time);
             Eigen::Vector3i next_p_index = posToIndex(next_pos);
+            // std::cout << "next_p_index" << next_p_index << std::endl;
 
             // check node if ever been expanded and if closed
-            TrajNodePtr next_node = expanded_nodes_.findNode(next_p_index, next_t_index);
-            if (next_node != NULL){
-                ROS_WARN("Revisit same node!");
+            TrajNodePtr next_node = expanded_nodes_.findNode(next_p_index, next_r_index, next_t_index);
+            if (next_node != NULL)
+            {
+                // ROS_WARN("Revisit same node!");
                 // std::cout <<"Revisit" <<"x: "<< next_pos(0) <<"y: "<< next_pos(1)<<"z: "<< next_pos(2)<< std::endl;
                 if (next_node->node_state == CLOSED)
                     continue;
@@ -241,7 +260,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                 midd_pos = midd_state.head(3);
                 collision = gridmap_->getOccupancy(midd_pos);
                 if (collision != 0){
-                    ROS_WARN("collision!");
+                    // ROS_WARN("collision!");
                     break;
                 }
                    
@@ -251,7 +270,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
 
 
             // get node cost
-            double node_g_cost = (input.squaredNorm() + rho_t_) * tau_ + curr_node->g_cost;
+            double node_g_cost = (fz*fz+ rho_t_) * tau_ + curr_node->g_cost;
             double node_h_cost = rho_t_ * getHeuristicCost(next_state, end_state);
             double node_f_cost = node_g_cost + lambda_h_ * node_h_cost;
 
@@ -260,7 +279,7 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
             for (int j = 0; j < neighboor_nodes.size(); ++j)
             {
                 TrajNodePtr neighboor_node = neighboor_nodes[j];
-                if ((next_p_index - neighboor_node->p_index).norm() == 0 && next_t_index == neighboor_node->t_index)
+                if ((next_p_index - neighboor_node->p_index).norm() == 0 && next_t_index == neighboor_node->t_index && (next_r_index - neighboor_node->r_index).norm() == 0)
                 {
                     prune = true;
                     if (node_f_cost < neighboor_node->f_cost)
@@ -270,9 +289,9 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                         neighboor_node->f_cost = node_f_cost;
                         neighboor_node->state = next_state;
                         neighboor_node->input = input;
-                        neighboor_node->rotation = rotation;
+                        // neighboor_node->rotation = rotation;
                         neighboor_node->duration = tau_;
-                        next_node->timestamp = next_time;
+                        neighboor_node->timestamp = next_time;
                         break;
                     }
                 }
@@ -292,21 +311,24 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                 next_node->timestamp = next_time;
                 next_node->p_index = next_p_index;
                 next_node->t_index = next_t_index;
+                next_node->r_index = next_r_index;
                 next_node->g_cost = node_g_cost;
                 next_node->h_cost = node_h_cost;
                 next_node->f_cost = node_f_cost;
                 next_node->node_state = OPEN;
 
                 // update open set and hashtable
-                open_set_.push(next_node);
-                expanded_nodes_.insertNode(next_node->p_index, next_node->t_index, next_node);
+                // open_set_.push(next_node);
+                // expanded_nodes_.insertNode(next_node->p_index, next_node->t_index, next_node);
                 neighboor_nodes.push_back(next_node);
 
-                std::cout <<" r : "<< resolution_ ;
-                std::cout <<" x: "<< next_pos(0) <<" y: "<< next_pos(1)<<" z: "<< next_pos(2);
-                std::cout <<" p index: "<< next_node->p_index(0) <<" y: "<< next_node->p_index(1)<<" z: "<< next_node->p_index(2);
-                std::cout <<" t index: "<< next_node->t_index ;
-                std::cout <<"  last g:"<<curr_node->g_cost<<" node_g_cost: "<< node_g_cost <<" node_h_cost: "<< node_h_cost << std::endl;
+                // std::cout << "expand============================" << std::endl;
+                // std::cout << " r : " << resolution_;
+                // std::cout <<" x: "<< next_pos(0) <<" y: "<< next_pos(1)<<" z: "<< next_pos(2);
+                // std::cout <<" p index: "<< next_node->p_index(0) <<" y: "<< next_node->p_index(1)<<" z: "<< next_node->p_index(2);
+                // std::cout <<" t index: "<< next_node->t_index;
+                // std::cout <<" input: "<< next_node->input;
+                // std::cout <<"  last g:"<<curr_node->g_cost<<" node_g_cost: "<< node_g_cost <<" node_h_cost: "<< node_h_cost << std::endl;
 
                 // update mem count
                 used_node_num_ += 1;
@@ -331,6 +353,18 @@ int RotationAstar::search(Eigen::Vector3d start_pos, Eigen::Vector3d start_vel, 
                 ROS_WARN("Node state: CLOSED!");
             }
             }
+        }
+        for (int i = 0; i < neighboor_nodes.size(); i++)
+        {
+            open_set_.push(neighboor_nodes[i]);
+            expanded_nodes_.insertNode(neighboor_nodes[i]->p_index,neighboor_nodes[i]->r_index, neighboor_nodes[i]->t_index, neighboor_nodes[i]);
+            // std::cout << "expand============================" << std::endl;
+            // std::cout << " r : " << resolution_;
+            // std::cout <<" x: "<< next_pos(0) <<" y: "<< next_pos(1)<<" z: "<< next_pos(2);
+            std::cout <<" p index: "<< neighboor_nodes[i]->p_index(0) <<" y: "<< neighboor_nodes[i]->p_index(1)<<" z: "<< neighboor_nodes[i]->p_index(2);
+            std::cout <<" timestamp : "<< neighboor_nodes[i]->timestamp << std::endl;
+            std::cout <<" rotation: "<< neighboor_nodes[i]->rotation(0) << std::endl;
+            // std::cout <<"  last g:"<< curr_node->g_cost<<" node_g_cost: "<< node_g_cost <<" node_h_cost: "<< node_h_cost << std::endl;
         }
     }
     // ROS_ERROR("Open set empty!");
@@ -376,8 +410,8 @@ void RotationAstar::getSampleTraj(double sample_rate, std::vector<Eigen::Vector3
             for (double d_tau = duration; d_tau >= -1e-5; d_tau -= duration / sample_rate){
                 stateTransition(state_i, state_f, input, d_tau);
                 pos_sample_list.push_back(state_f.head(3));
-                std::cout << "input " << input <<std::endl;
-                std::cout << " f" << input + g << std::endl;
+                // std::cout << "input " << input <<std::endl;
+                // std::cout << " f" << input + g << std::endl;
                 force_sample_list.push_back(input + g);
             }
 

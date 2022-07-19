@@ -26,6 +26,7 @@ struct TrajNode
     double timestamp;
 
     Eigen::Vector3i p_index;
+    Eigen::Vector3i r_index;
     int t_index;
     double g_cost;
     double h_cost;
@@ -64,7 +65,7 @@ struct matrix_hash : std::unary_function<T, size_t> {
 
 class TrajNodeHashTable {
 private:
-    std::unordered_map<Eigen::Vector4i, TrajNodePtr, matrix_hash<Eigen::Vector4i>> trajnode_data_;
+    std::unordered_map<Eigen::Matrix<int, 7, 1>, TrajNodePtr, matrix_hash<Eigen::Matrix<int, 7, 1>>> trajnode_data_;
 
 public:
     TrajNodeHashTable(){}
@@ -74,13 +75,18 @@ public:
         trajnode_data_.clear();
     }
 
-    void insertNode(Eigen::Vector3i p_index, int t_index, TrajNodePtr node){
-        Eigen::Vector4i pt_index(p_index(0), p_index(1), p_index(2), t_index);
+    void insertNode(Eigen::Vector3i p_index, Eigen::Vector3i r_index, int t_index, TrajNodePtr node){
+        // Eigen::Vector4i pt_index(p_index(0), p_index(1), p_index(2), t_index);
+        Eigen::Matrix<int, 7, 1> pt_index;
+        pt_index <<  p_index(0), p_index(1), p_index(2), r_index(0), r_index(1), r_index(2), t_index;
         trajnode_data_.insert(std::make_pair(pt_index, node));
     }
 
-    TrajNodePtr findNode(Eigen::Vector3i p_index, int t_index){
-        Eigen::Vector4i pt_index(p_index(0), p_index(1), p_index(2), t_index);
+    TrajNodePtr findNode(Eigen::Vector3i p_index, Eigen::Vector3i r_index, int t_index){
+        // Eigen::Vector4i pt_index(p_index(0), p_index(1), p_index(2), t_index);
+        // Eigen::Matrix<int, 7, 1> pt_index {{p_index(0), p_index(1), p_index(2), r_index(0), r_index(1), r_index(2), t_index}};
+        Eigen::Matrix<int, 7, 1> pt_index;
+        pt_index <<  p_index(0), p_index(1), p_index(2), r_index(0), r_index(1), r_index(2), t_index;
         auto iter = trajnode_data_.find(pt_index);
         return iter == trajnode_data_.end() ? NULL : iter->second;
     }
@@ -120,9 +126,11 @@ private:
     // get node index
     Eigen::Vector3i posToIndex(Eigen::Vector3d pos);
     int timeToIndex(double time);
+    Eigen::Vector3i rotToIndex(Eigen::Vector3d rot);
 
     // get rotation aware input
-    void getRotationInput(TrajNodePtr curr_node, std::vector<Eigen::Vector3d> &input_list, std::vector<Eigen::Vector3d> &rot_list);
+    void getRotationInputPhiLarge(TrajNodePtr curr_node, std::vector<Eigen::Vector3d> &input_list,
+                                  std::vector<Eigen::Vector3d> &rot_list, std::vector<double> &fz_list);
     // get trajectory -> full_traj_nodes_
     void getFullTraj(TrajNodePtr end_node);
 
