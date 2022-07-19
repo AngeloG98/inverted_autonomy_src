@@ -22,6 +22,7 @@ struct TrajNode
     Eigen::Matrix<double, 6, 1> state; // current position and velocity
     Eigen::Vector3d input; // input from parent node, which is current acceleration(rotation).
     Eigen::Vector3d rotation;
+    double fz;
     double duration;
     double timestamp;
 

@@ -68,28 +68,63 @@ void GridMap::setOccupancyObject(Eigen::MatrixXd objectlist, double occ){
 
     // }
 
-    // box
-    Eigen::Vector3d object_up(0.3, 10, 17);
-    Eigen::Vector3d object_low(-0.3, -10, 12);
+    /*--------------------------------------------------------------------------------*/
+    // // set a box-like range
+    // Eigen::Vector3d object_up(0.3, 10, 17);
+    // Eigen::Vector3d object_low(-0.3, -10, 12);
 
-    // set a box-like range
+    // Eigen::Vector3d pos;
+    // pcl::PointXYZ pt;
+    // for (int x = object_low(0)*map_data_->resolution_inv; x <= object_up(0)*map_data_->resolution_inv; x++)
+    //     for (int y = object_low(1)*map_data_->resolution_inv; y <= object_up(1)*map_data_->resolution_inv; y++)
+    //         for (int z = object_low(2)*map_data_->resolution_inv; z <= object_up(2)*map_data_->resolution_inv; z++){
+    //             // set occupancy_buffer
+    //             pos << x*map_data_->resolution, y*map_data_->resolution, z*map_data_->resolution;
+    //             setOccupancy(pos, occ);
+
+    //             // set cloud for display
+    //             if (occ == 1){
+    //                 pt.x = pos(0);
+    //                 pt.y = pos(1);
+    //                 pt.z = pos(2);
+    //                 cloud_.push_back(pt);
+    //             }
+    //         }
+    /*--------------------------------------------------------------------------------*/
+
+
+    /*--------------------------------------------------------------------------------*/
+    // set a cylinder range
+    Eigen::Vector3d cy_center(0.0, 0.0, 6.0); // x,y,z
+    double cy_R = 3.0;
+    Eigen::Vector3d object_up(5.0, 5, 15.0);
+    Eigen::Vector3d object_low(-5.0, -5, 0.0);
+
     Eigen::Vector3d pos;
     pcl::PointXYZ pt;
-    for (int x = object_low(0)*map_data_->resolution_inv; x <= object_up(0)*map_data_->resolution_inv; x++)
+    bool if_in_occ;
+    for (int x = object_low(0) * map_data_->resolution_inv; x <= object_up(0) * map_data_->resolution_inv; x++)
         for (int y = object_low(1)*map_data_->resolution_inv; y <= object_up(1)*map_data_->resolution_inv; y++)
             for (int z = object_low(2)*map_data_->resolution_inv; z <= object_up(2)*map_data_->resolution_inv; z++){
                 // set occupancy_buffer
+                if_in_occ = false;
                 pos << x*map_data_->resolution, y*map_data_->resolution, z*map_data_->resolution;
-                setOccupancy(pos, occ);
-
+                double dist = pow(pos(0) - cy_center(0), 2) + pow(pos(2) - cy_center(2), 2);
+                if (dist <= pow(cy_R,2) && dist >= pow(cy_R*3/4,2))
+                {
+                    setOccupancy(pos, occ);
+                    if_in_occ = true;
+                }
                 // set cloud for display
-                if (occ == 1){
+                if (occ == 1 && if_in_occ){
                     pt.x = pos(0);
                     pt.y = pos(1);
                     pt.z = pos(2);
                     cloud_.push_back(pt);
                 }
             }
+    /*--------------------------------------------------------------------------------*/
+
     ROS_INFO("Objects occupied success!");
 }
 

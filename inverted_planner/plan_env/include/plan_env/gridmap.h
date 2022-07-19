@@ -19,7 +19,7 @@ struct MapHelper
         //
         resolution = 0.1;
         resolution_inv = 1 / resolution;
-        map_size << 50.0, 50.0, 50.0;
+        map_size << 50.0, 50.0, 20.0;
         map_origin << -map_size(0)/ 2.0, -map_size(1)/ 2.0, 0.0;
         map_pos_min = map_origin;
         map_pos_max = map_origin + map_size;

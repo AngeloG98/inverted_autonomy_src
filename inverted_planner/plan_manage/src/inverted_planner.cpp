@@ -17,11 +17,11 @@ InvertedPlanner::InvertedPlanner(const ros::NodeHandle &nh,
 
     rot_astar_->setGridMap(global_gridmap_);
     rot_astar_->init();
-    Eigen::Vector3d start_pos(-3, 0, 15);
+    Eigen::Vector3d start_pos(-4.1, 0, 6);
     Eigen::Vector3d start_vel(3,0,0);
     Eigen::Vector3d start_acc(0,0,0);
-    Eigen::Vector3d end_pos(3, 0, 15);
-    Eigen::Vector3d end_vel(4,0,0);
+    Eigen::Vector3d end_pos(3, 0, 2);
+    Eigen::Vector3d end_vel(3,0,0);
     double start_time = 0.0;
     ROS_INFO("Start rotation a star searching...");
     int astar_traj = rot_astar_->search(start_pos, start_vel, start_acc, end_pos, end_vel, start_time);
