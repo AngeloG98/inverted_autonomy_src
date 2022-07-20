@@ -12,7 +12,7 @@ PlanManager::~PlanManager()
 
 void PlanManager::cubicBsplineFromControlPoint(
         const Eigen::MatrixXd &ctrl_pts, const double &ts){
-    updateTrajInfo(UniformBspline(ctrl_pts, 3, ts), ros::Time::now());
+    updateTrajInfo(UniformBspline(ctrl_pts, 4, ts), ros::Time::now());
 }
 
 void PlanManager::updateTrajInfo(

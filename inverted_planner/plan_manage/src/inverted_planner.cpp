@@ -23,30 +23,31 @@ InvertedPlanner::InvertedPlanner(const ros::NodeHandle &nh,
     ROS_INFO("Finish rotation a star searching: %d]", astar_traj);
 
     // cubic b-spline
+    int pre_N = 60;
     double a_sample_ts = 0.05; // here, d_t = tau / sample_rate
     std::vector<Eigen::Vector3d> astar_sample_pts;
     std::vector<Eigen::Vector3d> astar_sample_fzs;
     rot_astar_->getSampleTraj(a_sample_ts, astar_sample_pts, astar_sample_fzs);
-    Eigen::MatrixXd control_points(3,3+astar_sample_pts.size());
+    Eigen::MatrixXd control_points(3,pre_N+astar_sample_pts.size());
     double ts = 0.05;
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < pre_N; i++)
     {
-        control_points(0, i) = start_pos(0)-3*(2-i)*ts;
+        control_points(0, i) = start_pos(0)-start_vel(0)*(pre_N-1-i)*ts;
         control_points(1, i) = start_pos(1);
         control_points(2, i) = start_pos(2);
     }
-    for (int i = 3; i < 3+astar_sample_pts.size(); i++)
+    for (int i = pre_N; i < pre_N+astar_sample_pts.size(); i++)
     {
-        control_points(0, i) = astar_sample_pts[i-3](0);
-        control_points(1, i) = astar_sample_pts[i-3](1);
-        control_points(2, i) = astar_sample_pts[i-3](2);
+        control_points(0, i) = astar_sample_pts[i-pre_N](0);
+        control_points(1, i) = astar_sample_pts[i-pre_N](1);
+        control_points(2, i) = astar_sample_pts[i-pre_N](2);
     }
     plan_manager_->cubicBsplineFromControlPoint(control_points, ts);
 
     start_plan_sub_ = nh_.subscribe("trigger/bspline_plan", 1, &InvertedPlanner::startPlanCallback, this);
     trajectory_point_pub_ = nh_.advertise<flight_msgs::TrajectoryPoint>("trajectory_points/bspline", 1);
     plan_timer_ = nh_.createTimer(ros::Duration(1.0 / 300), &InvertedPlanner::planPubCallback, this);
-    plan_vis_timer_ = nh_.createTimer(ros::Duration(1.0 / 1), &InvertedPlanner::planVisCallback, this);
+    plan_vis_timer_ = nh_.createTimer(ros::Duration(1.0 / 0.1), &InvertedPlanner::planVisCallback, this);
 }
 
 void InvertedPlanner::startPlanCallback(const std_msgs::Int32 &msg){
@@ -86,7 +87,7 @@ void InvertedPlanner::planVisCallback(const ros::TimerEvent &time){
 }
 
 void InvertedPlanner::planPubCallback(const ros::TimerEvent &time){
-    if (false){ // go
+    if (true){ // go
         double sample_rate = 300;
 
         // to flatness control
@@ -102,7 +103,8 @@ void InvertedPlanner::planPubCallback(const ros::TimerEvent &time){
         vel_i = plan_manager_->local_traj_.velocity_traj_.evaluateDeBoorT(count/sample_rate);
         acc_i = plan_manager_->local_traj_.acceleration_traj_.evaluateDeBoorT(count/sample_rate);
         yaw_i = 0.0;
-        if (count < num) count += 1;
+        if (count < num-1)
+            count += 1;
 
         // msg
         flight_msgs::TrajectoryPoint curr_traj_point;

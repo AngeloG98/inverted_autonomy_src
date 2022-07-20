@@ -13,7 +13,7 @@ GridMap::GridMap(ros::NodeHandle &nh)
 
     map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/plan_env/grid_map", 1);
     // update_timer_ = nh_.createTimer(ros::Duration(0.05), &LwqFlatness::updateMapCallback, this);
-    vis_timer_ = nh_.createTimer(ros::Duration(0.1), &GridMap::visMapCallback, this);
+    vis_timer_ = nh_.createTimer(ros::Duration(1/0.1), &GridMap::visMapCallback, this);
 
     // cloud init
     cloud_.width = cloud_.points.size();
