@@ -34,6 +34,7 @@ private:
     void odometryCallback(const nav_msgs::Odometry &odom_msg);
     void imuDataCallback(const sensor_msgs::Imu &imu_msg);
     void mavrosStateCallback(const mavros_msgs::State &msg);
+    void finishPlanCallback(const std_msgs::Int32 &msg);
 
     void mainCtrlCallback(const ros::TimerEvent &time);
     void trajectoryRecvCtrlCallback(const flight_msgs::TrajectoryPoint &trajectory_point_msg);
@@ -64,6 +65,7 @@ private:
     ros::Subscriber odometry_sub_;
     ros::Subscriber imudata_sub_;
     ros::Subscriber mavros_state_sub_;
+    ros::Subscriber finish_plan_sub_;
 
     ros::Publisher trajectory_trigger_pub_;
     ros::Publisher pwm_pub_;
@@ -89,6 +91,8 @@ private:
     Eigen::Vector3d take_off_velocity;
     Eigen::Vector3d take_off_curr_position;
     bool get_trajectory;
+    bool trajectory_ready;
+    bool udp_ready;
 
     flight_common::StateEstimate curr_state_;
     flight_common::TrajectoryPoint reference_;

@@ -33,11 +33,12 @@ private:
     ros::Timer plan_vis_timer_;
     ros::Subscriber start_plan_sub_;
     ros::Publisher trajectory_point_pub_;
+    ros::Publisher finish_plan_pub_;
     void planPubCallback(const ros::TimerEvent &time);
     void planVisCallback(const ros::TimerEvent &time);
     void startPlanCallback(const std_msgs::Int32 &msg);
 
-    bool go;
+    bool go_;
     int count;
 
     // circle

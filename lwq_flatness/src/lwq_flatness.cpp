@@ -11,14 +11,16 @@ LwqFlatness::LwqFlatness(const ros::NodeHandle &nh,
     model_data_ = std::make_shared<lwq_flatness::ModelHelper>();
     model_data_->setModelParams();
 
-    udp_control_ =
-        std::make_shared<udp_interface::UdpInterface>(nh_, pnh_, "192.168.1.87", 20010, "192.168.1.197", 20020);
+    // udp_control_ =
+    //     std::make_shared<udp_interface::UdpInterface>(nh_, pnh_, "192.168.1.87", 20010, "192.168.1.197", 20020);
 
-    in_position = true;
+    in_position = false;
     get_trajectory = false;
-    take_off_position << 0.0, 0.0, -20.0;
-    take_off_velocity << 0.0, 0.0, -2.0;
-    take_off_curr_position << 0.0, 0.0, -0.0;
+    trajectory_ready = false;
+    udp_ready = false;
+    take_off_position << -33.0, 0.0, 6.0;
+    take_off_velocity << 0.0, 0.0, 2.0;
+    take_off_curr_position << -33.0, 0.0, -0.0;
     time_ctrl_init = ros::Time::now();
     R_FLU_2_FRD << 1, 0, 0,
         0, -1, 0,
@@ -28,6 +30,7 @@ LwqFlatness::LwqFlatness(const ros::NodeHandle &nh,
     odometry_sub_ = nh_.subscribe("/mavros/local_position/odom", 2, &LwqFlatness::odometryCallback, this);
     imudata_sub_ = nh_.subscribe("/mavros/imu/data", 2, &LwqFlatness::imuDataCallback, this);
     mavros_state_sub_ = nh_.subscribe("mavros/state", 1, &LwqFlatness::mavrosStateCallback,this);
+    finish_plan_sub_ = nh_.subscribe("trigger/finish_plan", 10, &LwqFlatness::finishPlanCallback, this);
     
     trajectory_trigger_pub_ = nh_.advertise<std_msgs::Int32>("trigger/bspline_plan", 1);
     pwm_pub_ = nh_.advertise<mavros_msgs::RCOut>("/mavros/rc/out", 1);
@@ -83,10 +86,23 @@ void LwqFlatness::trajectoryRecvCtrlCallback(
     get_trajectory = true;
     flight_common::TrajectoryPoint ref(trajectory_point_msg);
     reference_ = ref;
-    // ROS_INFO("trajectoryRecvCtrlCallback!");
+    ROS_INFO("trajectoryRecvCtrlCallback!");
+}
+
+void LwqFlatness::finishPlanCallback(const std_msgs::Int32 &msg){
+    if (msg.data == 1){
+        trajectory_ready = true;
+    }
 }
 
 void LwqFlatness::mainCtrlCallback(const ros::TimerEvent &time){
+if (trajectory_ready && !udp_ready){
+    udp_control_ =
+        std::make_shared<udp_interface::UdpInterface>(nh_, pnh_, "192.168.1.87", 20010, "192.168.1.197", 20020);
+    udp_ready = true;
+}
+
+if (udp_ready){
     // udp
     mavrosState_.mode = "OFFBOARD";
     const flight_common::StateEstimate state = udp_control_->getStatefromUdp();
@@ -109,14 +125,18 @@ void LwqFlatness::mainCtrlCallback(const ros::TimerEvent &time){
         flight_common::TrajectoryPoint reference;
 
         ROS_INFO_STREAM_ONCE("Taking off ...");
-        if (take_off_curr_position.norm() > take_off_position.norm()*0.9) {
+        if (abs(take_off_curr_position(2)) > abs(take_off_position(2))*0.9) {
             reference.position = take_off_position;
-            if ((state.position - take_off_position).norm() < 2.0 && state.velocity.norm() < 0.5) {
+            reference.velocity << 0.0, 0.0, 0.0;
+            reference.acceleration << 0.0, 0.0, 0.0;
+            if ((state.position - R_FLU_2_FRD * take_off_position).norm() < 2.0 && state.velocity.norm() < 0.5) {
                 in_position = true;
             }
         } else {
             take_off_curr_position += take_off_velocity / ctrl_data_->freq;
             reference.position = take_off_curr_position;
+            reference.velocity << 0.0, 0.0, 0.0;
+            reference.acceleration << 0.0, 0.0, 0.0;
         }
         Command = run(reference, state, 1);
     }
@@ -128,12 +148,13 @@ void LwqFlatness::mainCtrlCallback(const ros::TimerEvent &time){
             std_msgs::Int32 trajectory_trigger;
             trajectory_trigger.data = 1;
             trajectory_trigger_pub_.publish(trajectory_trigger);
-            // flight_common::TrajectoryPoint reference;
-            // reference.position = take_off_position;
-            // Command = run(reference, state, 1);
+            flight_common::TrajectoryPoint reference;
+            reference.position = take_off_position;
+            Command = run(reference, state, 1);
         } else {
             ROS_INFO_STREAM_ONCE("Executing trajectory ...");
             const flight_common::TrajectoryPoint reference = reference_;
+            std::cout << "reference_:  "<< reference_.position(0) << std::endl;
             Command = run(reference, state, 0);
         }
     }
@@ -192,6 +213,7 @@ void LwqFlatness::mainCtrlCallback(const ros::TimerEvent &time){
     euler_des_pub_.publish(euler_des_msg);
     // euler_est_pub_.publish(euler_est_msg);
 }
+}
 
 flight_common::ControlCommand LwqFlatness::run(
         const flight_common::TrajectoryPoint &reference_state,
@@ -209,7 +231,7 @@ flight_common::ControlCommand LwqFlatness::run(
     // position control
     pos_des_ = R_FLU_2_FRD * reference_state.position;
     // pos_des_ = reference_state.position;
-    const Eigen::Vector3d vel_fd = computeVelFeedback(reference_state.position, estimate_state.position);
+    const Eigen::Vector3d vel_fd = computeVelFeedback(R_FLU_2_FRD * reference_state.position, estimate_state.position);
 
     // velocity control
     Eigen::Vector3d vel_des;
@@ -220,15 +242,15 @@ flight_common::ControlCommand LwqFlatness::run(
     else
     {
         // vel_des = reference_state.velocity + vel_fd;
-        vel_des = R_FLU_2_FRD * reference_state.velocity;
         // vel_des = reference_state.velocity;
+        vel_des = R_FLU_2_FRD * reference_state.velocity + vel_fd;
+        // vel_des = R_FLU_2_FRD * reference_state.velocity;
         // vel_des = vel_fd;
     }
     vel_des_ = vel_des;
     // flight_common::limit(vel_des(0), 2.0);
     // flight_common::limit(vel_des(1), 2.0);
     // flight_common::limit(vel_des(2), 2.0);
-    // std::cout << "vel_des:  "<<vel_des << std::endl;
     const Eigen::Vector3d acc_fd = computeAccFeedback(vel_des, estimate_state.velocity);
 
     // transform desire acceleration and yaw(heading) to desire attitude and thrust (use flatness transform as default here)
@@ -241,15 +263,16 @@ flight_common::ControlCommand LwqFlatness::run(
     {
         // acc_des = reference_state.acceleration + acc_fd;
         // acc_des = reference_state.acceleration * 0.8 + acc_fd;
-        acc_des = R_FLU_2_FRD * reference_state.acceleration;
+        // acc_des = R_FLU_2_FRD * reference_state.acceleration;
+        acc_des = R_FLU_2_FRD * reference_state.acceleration + acc_fd;
         // acc_des = reference_state.acceleration;
         // acc_des = acc_fd;
     }
     acc_des_ = acc_des;
     // std::cout << "acc_des:  "<< acc_des << std::endl;
-    computeAttitudeThrust(vel_des, acc_des, reference_state.yaw, &Cmd_des, use_Musk);
+    // computeAttitudeThrust(vel_des, acc_des, reference_state.yaw, &Cmd_des, use_Musk);
     // computeAttitudeThrustFormAeroForceEstimate(vel_des, acc_des, reference_state, estimate_state, &Cmd_des, use_Musk);
-    // computeAttitudeThrustQuadrotor(acc_des, reference_state, &Cmd_des);
+    computeAttitudeThrustQuadrotor(acc_des, reference_state, &Cmd_des);
 
     // attitude control
     Eigen::Vector3d bodyrate_fd = computeBodyrateFeedback(Cmd_des.orientation, estimate_state.orientation);
